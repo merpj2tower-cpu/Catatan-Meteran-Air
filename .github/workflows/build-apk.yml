@@ -1,35 +1,70 @@
-name: Build Android APK
+name: Build Catatan Meter Air APK
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
+      - master
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Detect Project
+        run: |
+          echo "Isi repository:"
+          ls -la
+          echo "Mencari Gradle Wrapper..."
+          find . -maxdepth 4 -name gradlew -type f
+
+      - name: Set Up Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle
 
-      - name: Set up Android SDK
+      - name: Set Up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
-      - name: Build APK
+      - name: Locate Gradle Wrapper
+        id: gradle
+        shell: bash
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          WRAPPER=$(find . -maxdepth 4 -name gradlew -type f | head -n 1)
+
+          if [ -z "$WRAPPER" ]; then
+            echo "ERROR: gradlew tidak ditemukan."
+            echo "Pastikan project Android sudah diekstrak."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$WRAPPER")
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          chmod +x "$WRAPPER"
+
+      - name: Build Debug APK
+        working-directory: ${{ steps.gradle.outputs.project_dir }}
+        run: |
+          ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: CatatanMeterAir-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            **/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+          retention-days: 7
